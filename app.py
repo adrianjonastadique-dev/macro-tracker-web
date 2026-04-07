@@ -7,7 +7,7 @@ st.set_page_config(page_title="Macro Tracker", layout="centered")
 
 # --- THE PAYWALL / PASSWORD ---
 # Buyers will find this password inside the PDF they purchase from you
-APP_PASSWORD = "raket" 
+APP_PASSWORD = "MacroMaster2026" 
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
