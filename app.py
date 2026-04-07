@@ -82,7 +82,23 @@ with st.form("food_entry_form"):
         }])
         st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
         st.rerun()
-
+# --- Custom Food Creator ---
+with st.expander("🛠️ Create Custom Food (per 100g)"):
+    with st.form("new_food_form", clear_on_submit=True):
+        new_name = st.text_input("Food Name")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: new_cals = st.number_input("Calories", min_value=0)
+        with c2: new_pro = st.number_input("Protein (g)", min_value=0.0)
+        with c3: new_carbs = st.number_input("Carbs (g)", min_value=0.0)
+        with c4: new_fats = st.number_input("Fats (g)", min_value=0.0)
+        
+        if st.form_submit_button("💾 Save to Session"):
+            if new_name != "":
+                new_db_entry = pd.DataFrame([[new_name, new_cals, new_pro, new_carbs, new_fats]], 
+                                            columns=st.session_state.food_db.columns)
+                st.session_state.food_db = pd.concat([st.session_state.food_db, new_db_entry], ignore_index=True)
+                st.session_state.food_db = st.session_state.food_db.sort_values(by="Food Item").reset_index(drop=True)
+                st.rerun()
 st.divider()
 
 # Dashboard
