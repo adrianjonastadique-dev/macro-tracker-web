@@ -6,7 +6,7 @@ import datetime
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
 # --- THE PAYWALL / PASSWORD ---
-APP_PASSWORD = "raket" 
+APP_PASSWORD = "MacroMaster2026" 
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
