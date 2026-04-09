@@ -3,35 +3,57 @@ import pandas as pd
 import datetime
 from streamlit_gsheets import GSheetsConnection
 
-# 1. App Configuration & Multi-User Password Gate
+# 1. App Configuration
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
-APP_PASSWORD = "MacroMaster2026" 
+# Establish the master connection early so the login screen can use it
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
+# ==========================================
+# --- TRUE AUTHENTICATION GATE ---
+# ==========================================
 if not st.session_state.authenticated:
     st.title("🔒 Premium Deficit Tracker")
     st.info("Please enter your Client ID and Password.")
     
-    # NEW: Multi-User Login Fields
-    entered_user = st.text_input("Username / Client ID", placeholder="e.g., JohnDoe")
+    entered_user = st.text_input("Username / Client ID")
     entered_pwd = st.text_input("Password", type="password")
     
-    if st.button("Unlock Dashboard"):
-        if entered_pwd == APP_PASSWORD and entered_user.strip() != "":
-            st.session_state.authenticated = True
-            # Lock in their specific username for this session
-            st.session_state.username = entered_user.strip()
-            st.rerun()
-        elif entered_pwd != APP_PASSWORD:
-            st.error("Incorrect password.")
+    if st.button("Login"):
+        if entered_user.strip() != "" and entered_pwd.strip() != "":
+            try:
+                # Fetch the Users database tab
+                users_db = conn.read(worksheet="Users", ttl=0)
+                users_db = users_db.dropna(subset=["Username"]) # Ignore empty rows
+                
+                # Check if the username exists in the sheet
+                user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
+                
+                if not user_match.empty:
+                    # Grab the correct password from the database
+                    correct_pwd = str(user_match.iloc[0]["Password"]).strip()
+                    
+                    if entered_pwd.strip() == correct_pwd:
+                        # Success! Let them in.
+                        st.session_state.authenticated = True
+                        st.session_state.username = entered_user.strip()
+                        st.rerun()
+                    else:
+                        st.error("❌ Incorrect password.")
+                else:
+                    st.error("❌ Username not found. Please check your credentials.")
+            except Exception as e:
+                st.error("🚨 Database connection error. Please ensure the 'Users' tab exists in your Google Sheet.")
         else:
-            st.error("Please enter a username.")
+            st.warning("Please enter both a Username and Password.")
     st.stop() # Stops the rest of the app from loading until unlocked
 
+# ==========================================
 # --- MAIN APP LOADS ONLY AFTER LOGIN ---
+# ==========================================
 
 with st.sidebar:
     st.header(f"👤 {st.session_state.username}")
@@ -46,11 +68,10 @@ with col_date:
     selected_date = st.date_input("📅 Date", datetime.date.today())
 
 # ==========================================
-# --- THE CLOUD DATABASE (MULTI-USER) ---
+# --- THE CLOUD DATABASE (MAIN LOG) ---
 # ==========================================
-conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 1. Fetch the ENTIRE master database (ttl=0 ensures it doesn't use old cached data)
+# Fetch the ENTIRE master food database from Sheet1
 global_db = conn.read(worksheet="Sheet1", ttl=0)
 global_db = global_db.dropna(how="all")
 
@@ -63,10 +84,10 @@ if "Username" not in global_db.columns:
 # Force dates to be text to prevent matching bugs
 global_db["Date"] = global_db["Date"].astype(str)
 
-# 2. THE BOUNCER: Filter the database so this user ONLY sees their own data
+# THE BOUNCER: Filter the database so this user ONLY sees their own data
 user_log = global_db[global_db["Username"] == st.session_state.username]
 
-# 3. Filter the user's data for the specific day they selected
+# Filter the user's data for the specific day they selected
 date_str = selected_date.strftime("%Y-%m-%d")
 todays_log = user_log[user_log["Date"] == date_str]
 
@@ -237,7 +258,6 @@ if 'food_db' not in st.session_state:
     st.session_state.food_db = pd.DataFrame(db_raw, columns=["Food Item", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
     st.session_state.food_db = st.session_state.food_db.sort_values(by="Food Item").reset_index(drop=True)
 
-
 # ==========================================
 # --- DATA ENTRY TABS ---
 # ==========================================
@@ -255,7 +275,6 @@ with tab1:
             food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
             multiplier = weight / 100
             
-            # Pack the new row, making sure to tag it with the user's name!
             new_entry = pd.DataFrame([{
                 "Username": st.session_state.username,
                 "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
@@ -265,7 +284,6 @@ with tab1:
                 "Fats (g)": food_row["Fats (g)"] * multiplier
             }])
             
-            # Safely append to the MASTER database and push to Google
             updated_db = pd.concat([global_db, new_entry], ignore_index=True)
             conn.update(worksheet="Sheet1", data=updated_db)
             st.cache_data.clear()
@@ -330,14 +348,12 @@ st.divider()
 
 if not todays_log.empty:
     st.write("### 📝 Logged Foods")
-    # We iterate over todays_log, which retains the original master index from global_db!
     for original_index, row in todays_log.iterrows():
         list_col1, list_col2, list_col3 = st.columns([2, 3, 1])
         with list_col1: st.write(f"**{row['Meal']}**\n{row['Food Item']}")
         with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g | C: {row['Carbs (g)']:.1f}g | F: {row['Fats (g)']:.1f}g)")
         with list_col3:
             if st.button("❌", key=f"del_{original_index}"):
-                # We drop the exact row from the master database using the original index
                 global_db = global_db.drop(original_index)
                 conn.update(worksheet="Sheet1", data=global_db)
                 st.cache_data.clear()
