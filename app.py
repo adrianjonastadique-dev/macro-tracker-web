@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
+from streamlit_gsheets import GSheetsConnection
 
 # 1. App Configuration & Password Gate
 st.set_page_config(page_title="Macro Tracker", layout="centered")
@@ -37,8 +38,26 @@ col_date, _ = st.columns([1, 2])
 with col_date:
     selected_date = st.date_input("📅 Date", datetime.date.today())
 
-# --- THE MEMORY FIX: Initialize and Load CSV Data ---
-import os
+# --- THE MEMORY FIX: Cloud Database ---
+# Establish the connection to Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+if 'daily_log' not in st.session_state:
+    try:
+        # 1. Download the permanent history from Google!
+        st.session_state.daily_log = conn.read(worksheet="Sheet1")
+        
+        # We force the Date column to be text so today's log perfectly matches
+        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
+        
+        # If the sheet is empty, pandas sometimes loads it as a bunch of NaNs. Let's drop them.
+        st.session_state.daily_log = st.session_state.daily_log.dropna(how="all")
+        
+    except:
+        # Create a blank log if it's the very first time running
+        st.session_state.daily_log = pd.DataFrame(columns=[
+            "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
+        ])
 
 # 1. Force Python to lock onto the EXACT folder where your app.py lives
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -233,15 +252,13 @@ with st.form("food_entry_form", clear_on_submit=False):
     with col2: selected_food = st.selectbox("Select Food:", st.session_state.food_db["Food Item"])
     with col3: weight = st.number_input("Amount (g):", min_value=0, value=100, step=10)
     
-    if st.form_submit_button("➕ Add Food"):
-        food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
-        multiplier = weight / 100
-        new_entry = pd.DataFrame([{
-            "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
-            "Amount (g)": weight, "Calories": food_row["Calories"] * multiplier,
-            "Protein (g)": food_row["Protein (g)"] * multiplier,
-            "Carbs (g)": food_row["Carbs (g)"] * multiplier,
-            "Fats (g)": food_row["Fats (g)"] * multiplier
+    # Add to session state
+        st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
+        
+        # ---> PUSH TO GOOGLE CLOUD <---
+        conn.update(worksheet="Sheet1", data=st.session_state.daily_log)
+        
+        st.rerun()
         }])
         
         # Add to session state
@@ -273,9 +290,9 @@ if not todays_log.empty:
         with list_col1: st.write(f"**{row['Meal']}**\n{row['Food Item']}")
         with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g)")
         with list_col3:
-            if st.button("❌", key=f"del_{index}"):
-                # Remove from session state
+           # Remove from session state
                 st.session_state.daily_log = st.session_state.daily_log.drop(index)
-                # ---> SAVE THE DELETION TO CSV <---
-                st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+                
+                # ---> PUSH DELETION TO GOOGLE CLOUD <---
+                conn.update(worksheet="Sheet1", data=st.session_state.daily_log)
                 st.rerun()
