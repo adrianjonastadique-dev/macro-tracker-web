@@ -7,7 +7,6 @@ import os
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
 # --- THE PAYWALL / PASSWORD ---
-# Buyers will find this password inside the PDF they purchase from you
 APP_PASSWORD = "MacroMaster2026" 
 
 if "authenticated" not in st.session_state:
@@ -23,7 +22,7 @@ if not st.session_state.authenticated:
             st.rerun()
         else:
             st.error("Incorrect password.")
-    st.stop() # Stops the rest of the app from loading until unlocked
+    st.stop()
 
 # --- MAIN APP LOADS ONLY AFTER PASSWORD ---
 
@@ -42,16 +41,14 @@ DATA_FILE = "calorie_history.csv"
 
 if 'daily_log' not in st.session_state:
     if os.path.exists(DATA_FILE):
-        # Load permanent history if it exists
         st.session_state.daily_log = pd.read_csv(DATA_FILE)
+        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
     else:
-        # Create a blank log if this is the very first time running
         st.session_state.daily_log = pd.DataFrame(columns=[
             "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
         ])
 
 if 'food_db' not in st.session_state:
-    # Core Database (Values per 100g unless otherwise specified)
     db_raw = [
         # POULTRY
         ["Chicken Breast (Boiled/Poached)", 165, 31.0, 0.0, 3.6],
@@ -154,7 +151,7 @@ if 'food_db' not in st.session_state:
         ["Okra (Boiled)", 22, 1.9, 4.0, 0.1],
         ["Monggo Beans (Boiled)", 105, 7.0, 19.0, 0.4],
         
-        # AROMATICS & RAW VEG (For recipe building)
+        # AROMATICS & RAW VEG
         ["Garlic (Raw)", 149, 6.4, 33.0, 0.5],
         ["Garlic (Fried)", 350, 7.0, 40.0, 20.0],
         ["Onion (Raw)", 40, 1.1, 9.0, 0.1],
@@ -215,35 +212,63 @@ if 'food_db' not in st.session_state:
     st.session_state.food_db = pd.DataFrame(db_raw, columns=["Food Item", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
     st.session_state.food_db = st.session_state.food_db.sort_values(by="Food Item").reset_index(drop=True)
 
-# Filter for selected date
 date_str = selected_date.strftime("%Y-%m-%d")
 todays_log = st.session_state.daily_log[st.session_state.daily_log["Date"] == date_str]
 
-# Data Entry
+# ==========================================
+# --- DATA ENTRY TABS ---
+# ==========================================
 st.subheader("🍽️ Log Food")
-with st.form("food_entry_form", clear_on_submit=False):
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1: meal_num = st.selectbox("Meal:", ["Meal 1", "Meal 2", "Meal 3", "Snacks"])
-    with col2: selected_food = st.selectbox("Select Food:", st.session_state.food_db["Food Item"])
-    with col3: weight = st.number_input("Amount (g):", min_value=0, value=100, step=10)
-    
-    if st.form_submit_button("➕ Add Food"):
-        food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
-        multiplier = weight / 100
-        new_entry = pd.DataFrame([{
-            "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
-            "Amount (g)": weight, "Calories": food_row["Calories"] * multiplier,
-            "Protein (g)": food_row["Protein (g)"] * multiplier,
-            "Carbs (g)": food_row["Carbs (g)"] * multiplier,
-            "Fats (g)": food_row["Fats (g)"] * multiplier
-        }])
+tab1, tab2 = st.tabs(["📚 From Database", "✍️ Custom Recipe"])
+
+with tab1:
+    with st.form("food_entry_form", clear_on_submit=False):
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1: meal_num = st.selectbox("Meal:", ["Meal 1", "Meal 2", "Meal 3", "Snacks"])
+        with col2: selected_food = st.selectbox("Select Food:", st.session_state.food_db["Food Item"])
+        with col3: weight = st.number_input("Amount (g):", min_value=0, value=100, step=10)
         
-        # Add to session state
-        st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
-        # ---> SAVE TO CSV <---
-        st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+        if st.form_submit_button("➕ Add Food"):
+            food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
+            multiplier = weight / 100
+            new_entry = pd.DataFrame([{
+                "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
+                "Amount (g)": weight, "Calories": food_row["Calories"] * multiplier,
+                "Protein (g)": food_row["Protein (g)"] * multiplier,
+                "Carbs (g)": food_row["Carbs (g)"] * multiplier,
+                "Fats (g)": food_row["Fats (g)"] * multiplier
+            }])
+            
+            st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
+            st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+            st.rerun()
+
+with tab2:
+    with st.form("custom_recipe_form", clear_on_submit=True):
+        st.caption("Enter the total macros for your custom meal or recipe.")
+        col1, col2 = st.columns([1, 2])
+        with col1: custom_meal_num = st.selectbox("Meal:", ["Meal 1", "Meal 2", "Meal 3", "Snacks"], key="custom_meal")
+        with col2: custom_name = st.text_input("Recipe / Food Name:", placeholder="e.g., Mom's Spaghetti")
         
-        st.rerun()
+        c1, c2, c3, c4 = st.columns(4)
+        c_cals = c1.number_input("Calories", min_value=0, step=10)
+        c_prot = c2.number_input("Protein (g)", min_value=0, step=1)
+        c_carb = c3.number_input("Carbs (g)", min_value=0, step=1)
+        c_fat = c4.number_input("Fats (g)", min_value=0, step=1)
+        
+        if st.form_submit_button("➕ Log Custom Recipe"):
+            if custom_name:
+                new_entry = pd.DataFrame([{
+                    "Date": date_str, "Meal": custom_meal_num, "Food Item": f"⭐ {custom_name}",
+                    "Amount (g)": "Custom", 
+                    "Calories": c_cals, "Protein (g)": c_prot, "Carbs (g)": c_carb, "Fats (g)": c_fat
+                }])
+                
+                st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
+                st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+                st.rerun()
+            else:
+                st.error("Please enter a name for your custom recipe!")
 
 st.divider()
 
@@ -264,7 +289,7 @@ c1.metric("Target", f"{cal_goal}")
 c2.metric("Consumed", f"{total_cals:.0f}")
 c3.metric("Remaining", f"{remaining_cals:.0f}")
 
-st.write("") # Little space
+st.write("") 
 st.write("**Total Macros Today**")
 m1, m2, m3 = st.columns(3)
 m1.metric("Protein", f"{total_prot:.0f}g")
@@ -281,8 +306,6 @@ if not todays_log.empty:
         with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g | C: {row['Carbs (g)']:.1f}g | F: {row['Fats (g)']:.1f}g)")
         with list_col3:
             if st.button("❌", key=f"del_{index}"):
-                # Remove from session state
                 st.session_state.daily_log = st.session_state.daily_log.drop(index)
-                # ---> SAVE THE DELETION TO CSV <---
                 st.session_state.daily_log.to_csv(DATA_FILE, index=False)
                 st.rerun()
