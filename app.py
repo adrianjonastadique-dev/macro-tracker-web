@@ -38,14 +38,20 @@ with col_date:
     selected_date = st.date_input("📅 Date", datetime.date.today())
 
 # --- THE MEMORY FIX: Initialize and Load CSV Data ---
-DATA_FILE = "calorie_history.csv"
+import os
+
+# 1. Force Python to lock onto the EXACT folder where your app.py lives
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, "calorie_history.csv")
 
 if 'daily_log' not in st.session_state:
     if os.path.exists(DATA_FILE):
-        # Load permanent history if it exists
+        # 2. Load the history
         st.session_state.daily_log = pd.read_csv(DATA_FILE)
+        # 3. CRITICAL FIX: Force the Date column to be text so today's log perfectly matches!
+        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
     else:
-        # Create a blank log if this is the very first time running
+        # Create a blank log if it is the very first time
         st.session_state.daily_log = pd.DataFrame(columns=[
             "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
         ])
