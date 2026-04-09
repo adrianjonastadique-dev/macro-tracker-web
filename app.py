@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-from streamlit_gsheets import GSheetsConnection
 
 # 1. App Configuration & Password Gate
 st.set_page_config(page_title="Macro Tracker", layout="centered")
@@ -38,39 +37,15 @@ col_date, _ = st.columns([1, 2])
 with col_date:
     selected_date = st.date_input("📅 Date", datetime.date.today())
 
-# --- THE MEMORY FIX: Cloud Database ---
-# Establish the connection to Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-if 'daily_log' not in st.session_state:
-    try:
-        # 1. Download the permanent history from Google!
-        st.session_state.daily_log = conn.read(worksheet="Sheet1")
-        
-        # We force the Date column to be text so today's log perfectly matches
-        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
-        
-        # If the sheet is empty, pandas sometimes loads it as a bunch of NaNs. Let's drop them.
-        st.session_state.daily_log = st.session_state.daily_log.dropna(how="all")
-        
-    except:
-        # Create a blank log if it's the very first time running
-        st.session_state.daily_log = pd.DataFrame(columns=[
-            "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
-        ])
-
-# 1. Force Python to lock onto the EXACT folder where your app.py lives
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, "calorie_history.csv")
+# --- THE MEMORY FIX: Initialize and Load CSV Data ---
+DATA_FILE = "calorie_history.csv"
 
 if 'daily_log' not in st.session_state:
     if os.path.exists(DATA_FILE):
-        # 2. Load the history
+        # Load permanent history if it exists
         st.session_state.daily_log = pd.read_csv(DATA_FILE)
-        # 3. CRITICAL FIX: Force the Date column to be text so today's log perfectly matches!
-        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
     else:
-        # Create a blank log if it is the very first time
+        # Create a blank log if this is the very first time running
         st.session_state.daily_log = pd.DataFrame(columns=[
             "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
         ])
@@ -232,7 +207,7 @@ if 'food_db' not in st.session_state:
         ["Cashews (Dry Roasted)", 574, 15.0, 33.0, 46.0],
         ["Chia Seeds", 486, 17.0, 42.0, 31.0],
 
-        # PROTEIN BARS (Values per item/serving, set weight to 100g in app to log 1 serving)
+        # PROTEIN BARS
         ["Quest Protein Bar (1 Bar)", 200, 21.0, 22.0, 8.0],
         ["Barebells Protein Bar (1 Bar)", 200, 20.0, 16.0, 7.0],
         ["Kirkland Protein Bar (1 Bar)", 190, 21.0, 22.0, 7.0]
@@ -252,13 +227,15 @@ with st.form("food_entry_form", clear_on_submit=False):
     with col2: selected_food = st.selectbox("Select Food:", st.session_state.food_db["Food Item"])
     with col3: weight = st.number_input("Amount (g):", min_value=0, value=100, step=10)
     
-    # Add to session state
-        st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
-        
-        # ---> PUSH TO GOOGLE CLOUD <---
-        conn.update(worksheet="Sheet1", data=st.session_state.daily_log)
-        
-        st.rerun()
+    if st.form_submit_button("➕ Add Food"):
+        food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
+        multiplier = weight / 100
+        new_entry = pd.DataFrame([{
+            "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
+            "Amount (g)": weight, "Calories": food_row["Calories"] * multiplier,
+            "Protein (g)": food_row["Protein (g)"] * multiplier,
+            "Carbs (g)": food_row["Carbs (g)"] * multiplier,
+            "Fats (g)": food_row["Fats (g)"] * multiplier
         }])
         
         # Add to session state
@@ -270,12 +247,16 @@ with st.form("food_entry_form", clear_on_submit=False):
 
 st.divider()
 
-# Dashboard
+# ==========================================
+# --- DASHBOARD & MACRO TRACKING ---
+# ==========================================
 total_cals = todays_log["Calories"].sum() if not todays_log.empty else 0
+total_prot = todays_log["Protein (g)"].sum() if not todays_log.empty else 0
+total_carbs = todays_log["Carbs (g)"].sum() if not todays_log.empty else 0
+total_fats = todays_log["Fats (g)"].sum() if not todays_log.empty else 0
 remaining_cals = cal_goal - total_cals
 
 st.write("**Calorie Progress**")
-# Added a small safeguard so the progress bar doesn't break if you go over your calories
 st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
 
 c1, c2, c3 = st.columns(3)
@@ -283,16 +264,25 @@ c1.metric("Target", f"{cal_goal}")
 c2.metric("Consumed", f"{total_cals:.0f}")
 c3.metric("Remaining", f"{remaining_cals:.0f}")
 
+st.write("") # Little space
+st.write("**Total Macros Today**")
+m1, m2, m3 = st.columns(3)
+m1.metric("Protein", f"{total_prot:.0f}g")
+m2.metric("Carbs", f"{total_carbs:.0f}g")
+m3.metric("Fats", f"{total_fats:.0f}g")
+
+st.divider()
+
 if not todays_log.empty:
     st.write("### 📝 Logged Foods")
     for index, row in todays_log.iterrows():
         list_col1, list_col2, list_col3 = st.columns([2, 3, 1])
         with list_col1: st.write(f"**{row['Meal']}**\n{row['Food Item']}")
-        with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g)")
+        with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g | C: {row['Carbs (g)']:.1f}g | F: {row['Fats (g)']:.1f}g)")
         with list_col3:
-           # Remove from session state
+            if st.button("❌", key=f"del_{index}"):
+                # Remove from session state
                 st.session_state.daily_log = st.session_state.daily_log.drop(index)
-                
-                # ---> PUSH DELETION TO GOOGLE CLOUD <---
-                conn.update(worksheet="Sheet1", data=st.session_state.daily_log)
+                # ---> SAVE THE DELETION TO CSV <---
+                st.session_state.daily_log.to_csv(DATA_FILE, index=False)
                 st.rerun()
