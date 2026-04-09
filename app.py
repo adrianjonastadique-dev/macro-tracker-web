@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import os
+from streamlit_gsheets import GSheetsConnection
 
-# 1. App Configuration & Password Gate
+# 1. App Configuration & Multi-User Password Gate
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
-# --- THE PAYWALL / PASSWORD ---
 APP_PASSWORD = "MacroMaster2026" 
 
 if "authenticated" not in st.session_state:
@@ -14,19 +13,29 @@ if "authenticated" not in st.session_state:
 
 if not st.session_state.authenticated:
     st.title("🔒 Premium Deficit Tracker")
-    st.info("Please enter the password provided in your purchase PDF.")
+    st.info("Please enter your Client ID and Password.")
+    
+    # NEW: Multi-User Login Fields
+    entered_user = st.text_input("Username / Client ID", placeholder="e.g., JohnDoe")
     entered_pwd = st.text_input("Password", type="password")
+    
     if st.button("Unlock Dashboard"):
-        if entered_pwd == APP_PASSWORD:
+        if entered_pwd == APP_PASSWORD and entered_user.strip() != "":
             st.session_state.authenticated = True
+            # Lock in their specific username for this session
+            st.session_state.username = entered_user.strip()
             st.rerun()
-        else:
+        elif entered_pwd != APP_PASSWORD:
             st.error("Incorrect password.")
-    st.stop()
+        else:
+            st.error("Please enter a username.")
+    st.stop() # Stops the rest of the app from loading until unlocked
 
-# --- MAIN APP LOADS ONLY AFTER PASSWORD ---
+# --- MAIN APP LOADS ONLY AFTER LOGIN ---
 
 with st.sidebar:
+    st.header(f"👤 {st.session_state.username}")
+    st.divider()
     st.header("🎯 Daily Targets")
     cal_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=2000, step=50)
 
@@ -36,18 +45,34 @@ col_date, _ = st.columns([1, 2])
 with col_date:
     selected_date = st.date_input("📅 Date", datetime.date.today())
 
-# --- THE MEMORY FIX: Initialize and Load CSV Data ---
-DATA_FILE = "calorie_history.csv"
+# ==========================================
+# --- THE CLOUD DATABASE (MULTI-USER) ---
+# ==========================================
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-if 'daily_log' not in st.session_state:
-    if os.path.exists(DATA_FILE):
-        st.session_state.daily_log = pd.read_csv(DATA_FILE)
-        st.session_state.daily_log["Date"] = st.session_state.daily_log["Date"].astype(str)
-    else:
-        st.session_state.daily_log = pd.DataFrame(columns=[
-            "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
-        ])
+# 1. Fetch the ENTIRE master database (ttl=0 ensures it doesn't use old cached data)
+global_db = conn.read(worksheet="Sheet1", ttl=0)
+global_db = global_db.dropna(how="all")
 
+# Armor: If the sheet is completely blank, build the columns so Python doesn't crash
+if "Username" not in global_db.columns:
+    global_db = pd.DataFrame(columns=[
+        "Username", "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
+    ])
+
+# Force dates to be text to prevent matching bugs
+global_db["Date"] = global_db["Date"].astype(str)
+
+# 2. THE BOUNCER: Filter the database so this user ONLY sees their own data
+user_log = global_db[global_db["Username"] == st.session_state.username]
+
+# 3. Filter the user's data for the specific day they selected
+date_str = selected_date.strftime("%Y-%m-%d")
+todays_log = user_log[user_log["Date"] == date_str]
+
+# ==========================================
+# --- CORE FOOD DATABASE ---
+# ==========================================
 if 'food_db' not in st.session_state:
     db_raw = [
         # POULTRY
@@ -212,8 +237,6 @@ if 'food_db' not in st.session_state:
     st.session_state.food_db = pd.DataFrame(db_raw, columns=["Food Item", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
     st.session_state.food_db = st.session_state.food_db.sort_values(by="Food Item").reset_index(drop=True)
 
-date_str = selected_date.strftime("%Y-%m-%d")
-todays_log = st.session_state.daily_log[st.session_state.daily_log["Date"] == date_str]
 
 # ==========================================
 # --- DATA ENTRY TABS ---
@@ -231,7 +254,10 @@ with tab1:
         if st.form_submit_button("➕ Add Food"):
             food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == selected_food].iloc[0]
             multiplier = weight / 100
+            
+            # Pack the new row, making sure to tag it with the user's name!
             new_entry = pd.DataFrame([{
+                "Username": st.session_state.username,
                 "Date": date_str, "Meal": meal_num, "Food Item": selected_food,
                 "Amount (g)": weight, "Calories": food_row["Calories"] * multiplier,
                 "Protein (g)": food_row["Protein (g)"] * multiplier,
@@ -239,8 +265,10 @@ with tab1:
                 "Fats (g)": food_row["Fats (g)"] * multiplier
             }])
             
-            st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
-            st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+            # Safely append to the MASTER database and push to Google
+            updated_db = pd.concat([global_db, new_entry], ignore_index=True)
+            conn.update(worksheet="Sheet1", data=updated_db)
+            st.cache_data.clear()
             st.rerun()
 
 with tab2:
@@ -259,13 +287,15 @@ with tab2:
         if st.form_submit_button("➕ Log Custom Recipe"):
             if custom_name:
                 new_entry = pd.DataFrame([{
+                    "Username": st.session_state.username,
                     "Date": date_str, "Meal": custom_meal_num, "Food Item": f"⭐ {custom_name}",
                     "Amount (g)": "Custom", 
                     "Calories": c_cals, "Protein (g)": c_prot, "Carbs (g)": c_carb, "Fats (g)": c_fat
                 }])
                 
-                st.session_state.daily_log = pd.concat([st.session_state.daily_log, new_entry], ignore_index=True)
-                st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+                updated_db = pd.concat([global_db, new_entry], ignore_index=True)
+                conn.update(worksheet="Sheet1", data=updated_db)
+                st.cache_data.clear()
                 st.rerun()
             else:
                 st.error("Please enter a name for your custom recipe!")
@@ -300,12 +330,15 @@ st.divider()
 
 if not todays_log.empty:
     st.write("### 📝 Logged Foods")
-    for index, row in todays_log.iterrows():
+    # We iterate over todays_log, which retains the original master index from global_db!
+    for original_index, row in todays_log.iterrows():
         list_col1, list_col2, list_col3 = st.columns([2, 3, 1])
         with list_col1: st.write(f"**{row['Meal']}**\n{row['Food Item']}")
         with list_col2: st.write(f"🔥 {row['Calories']:.0f} kcal (P: {row['Protein (g)']:.1f}g | C: {row['Carbs (g)']:.1f}g | F: {row['Fats (g)']:.1f}g)")
         with list_col3:
-            if st.button("❌", key=f"del_{index}"):
-                st.session_state.daily_log = st.session_state.daily_log.drop(index)
-                st.session_state.daily_log.to_csv(DATA_FILE, index=False)
+            if st.button("❌", key=f"del_{original_index}"):
+                # We drop the exact row from the master database using the original index
+                global_db = global_db.drop(original_index)
+                conn.update(worksheet="Sheet1", data=global_db)
+                st.cache_data.clear()
                 st.rerun()
