@@ -23,9 +23,16 @@ if "num1" not in st.session_state:
     st.session_state.num1 = random.randint(1, 10)
     st.session_state.num2 = random.randint(1, 10)
 
-# THE FIX: Initialize the memory slot ONCE. 
-if "cal_goal" not in st.session_state:
-    st.session_state.cal_goal = 2000
+# ==========================================
+# --- THE FIX: BULLETPROOF MEMORY VAULT ---
+# ==========================================
+# Initialize the target calories in global memory
+if "target_calories" not in st.session_state:
+    st.session_state.target_calories = 2000
+
+# Callback function: This only runs when you actively click the +/- on the widget
+def update_calorie_goal():
+    st.session_state.target_calories = st.session_state.calorie_input_widget
 
 # ==========================================
 # --- TRUE AUTHENTICATION GATE ---
@@ -144,11 +151,19 @@ with st.sidebar:
     st.divider()
     st.header("🎯 Daily Targets")
     
-    # THE FIX: By using key="cal_goal", Streamlit natively anchors this box to the memory slot we created at the top.
-    st.number_input("Calorie Goal:", min_value=1000, max_value=5000, step=50, key="cal_goal")
+    # We connect the widget to the global memory via the value parameter and the callback
+    st.number_input(
+        "Calorie Goal:", 
+        min_value=1000, 
+        max_value=5000, 
+        step=50, 
+        value=st.session_state.target_calories, 
+        key="calorie_input_widget",
+        on_change=update_calorie_goal
+    )
     
-    # Now we just read whatever the memory slot says
-    cal_goal = st.session_state.cal_goal
+    # Set the variable used by the rest of the app to the secure global memory
+    cal_goal = st.session_state.target_calories
 
 st.title("📊 Daily Deficit Tracker")
 
