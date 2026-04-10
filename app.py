@@ -307,9 +307,12 @@ with st.expander("➕ Log Food", expanded=False):
             f_item = f2.selectbox("Food", st.session_state.food_db["Food Item"])
             f_qty = f3.number_input("Grams", value=100, step=10)
             if st.form_submit_button("Add"):
-                row = st.session_state.food_db[st.session_state.food_db["Food Item"] == f_item].iloc[0]
-                mult = f_qty / 100
-                new = pd.DataFrame([{
+                if weight <= 0:
+                    st.error("⚠️ Amount must be greater than zero.")
+                else:
+                    food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == f_item].iloc[0]
+                    mult = f_qty / 100
+                    # ... [rest of your existing save logic] ...
                     "Username": st.session_state.username, "Date": date_str, "Meal": m_type, "Food Item": f_item,
                     "Amount (g)": f_qty, "Calories": row["Calories"]*mult, "Protein (g)": row["Protein (g)"]*mult,
                     "Carbs (g)": row["Carbs (g)"]*mult, "Fats (g)": row["Fats (g)"]*mult
