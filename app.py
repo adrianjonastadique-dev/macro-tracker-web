@@ -13,7 +13,7 @@ try:
     with open("style.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
-    st.error("style.css not found. Please ensure the file exists in the same directory.")
+    st.error("style.css not found. Please ensure it is in the same directory.")
 
 # Establish connection
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -57,7 +57,7 @@ if not st.session_state.authenticated:
             if st.form_submit_button("Sign In"):
                 current_time = time.time()
                 if current_time - st.session_state.last_request < 3.0:
-                    st.error("⏳ Wait a moment...")
+                    st.error("⏳ Please wait...")
                     st.stop()
                 st.session_state.last_request = current_time
                 if trap != "": st.stop()
@@ -167,7 +167,7 @@ if not user_log.empty:
     if not recent_items.empty:
         cols = st.columns(len(recent_items))
         for i, (idx, row) in enumerate(recent_items.iterrows()):
-            clean_label = row['Food Item'].replace("⚡ ", "")[:12]
+            clean_label = row['Food Item'].replace("⚡ ", "").replace("⭐ ", "")[:12]
             if cols[i].button(f"{clean_label}", key=f"smart_btn_{i}"):
                 new_entry = pd.DataFrame([{
                     "Username": st.session_state.username, "Date": date_str, "Meal": row['Meal'], 
@@ -305,52 +305,49 @@ with st.expander("➕ Log Food", expanded=False):
             f1, f2, f3 = st.columns([1, 2, 1])
             m_type = f1.selectbox("Meal", ["Meal 1", "Meal 2", "Meal 3", "Snack"])
             f_item = f2.selectbox("Food", st.session_state.food_db["Food Item"])
-            f_qty = f3.number_input("Grams", value=100, step=10)
+            f_qty = f3.number_input("Grams", min_value=0.0, value=100.0, step=10.0)
+            
             if st.form_submit_button("Add"):
-                if weight <= 0:
-                    st.error("⚠️ Amount must be greater than zero.")
+                if f_qty <= 0:
+                    st.error("❗ Amount must be a positive number.")
                 else:
-                    food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == f_item].iloc[0]
+                    row = st.session_state.food_db[st.session_state.food_db["Food Item"] == f_item].iloc[0]
                     mult = f_qty / 100
-                    # ... [rest of your existing save logic] ...
-                    "Username": st.session_state.username, "Date": date_str, "Meal": m_type, "Food Item": f_item,
-                    "Amount (g)": f_qty, "Calories": row["Calories"]*mult, "Protein (g)": row["Protein (g)"]*mult,
-                    "Carbs (g)": row["Carbs (g)"]*mult, "Fats (g)": row["Fats (g)"]*mult
-                }])
-                conn.update(worksheet="Sheet1", data=pd.concat([global_db, new], ignore_index=True))
-                st.cache_data.clear()
-                st.rerun()
+                    new = pd.DataFrame([{
+                        "Username": st.session_state.username, "Date": date_str, "Meal": m_type, "Food Item": f_item,
+                        "Amount (g)": f_qty, "Calories": row["Calories"]*mult, "Protein (g)": row["Protein (g)"]*mult,
+                        "Carbs (g)": row["Carbs (g)"]*mult, "Fats (g)": row["Fats (g)"]*mult
+                    }])
+                    conn.update(worksheet="Sheet1", data=pd.concat([global_db, new], ignore_index=True))
+                    st.cache_data.clear()
+                    st.rerun()
     with t2:
         with st.form("manual_log", clear_on_submit=True):
             c_f1, c_f2 = st.columns([1, 2])
             c_meal = c_f1.selectbox("Meal", ["Meal 1", "Meal 2", "Meal 3", "Snack"], key="c_meal")
-            c_name = c_f2.text_input("Name (e.g., Mom's Adobo)")
+            c_name = c_f2.text_input("Name")
+            c_weight = st.number_input("Amount (g)", min_value=0.0, value=100.0)
             
-            # Adding weight input for the custom item
-            c_weight = st.number_input("Amount (g)", min_value=1, value=100, step=10)
-            st.caption("Enter macros per 100g below:")
-            
+            st.caption("Enter macros per 100g:")
             m1, m2, m3, m4 = st.columns(4)
-            # Users enter the macros PER 100g
-            base_cal = m1.number_input("Kcals", min_value=0.0)
-            base_pro = m2.number_input("P", min_value=0.0)
-            base_car = m3.number_input("C", min_value=0.0)
-            base_fat = m4.number_input("F", min_value=0.0)
+            c_cal = m1.number_input("Kcals", min_value=0.0)
+            c_pro = m2.number_input("P", min_value=0.0)
+            c_car = m3.number_input("C", min_value=0.0)
+            c_fat = m4.number_input("F", min_value=0.0)
             
             if st.form_submit_button("Log Custom"):
-                if c_name:
-                    # Calculate final macros based on the weight entered
+                inputs = [c_cal, c_pro, c_car, c_fat, c_weight]
+                if not c_name:
+                    st.error("❗ Please name your custom meal.")
+                elif any(x < 0 for x in inputs):
+                    st.error("❗ Negative values are not allowed.")
+                elif c_weight == 0:
+                    st.error("❗ Weight cannot be zero.")
+                else:
                     mult = c_weight / 100
                     new_c = pd.DataFrame([{
-                        "Username": st.session_state.username, 
-                        "Date": date_str, 
-                        "Meal": c_meal, 
-                        "Food Item": f"⭐ {c_name}",
-                        "Amount (g)": c_weight, # Now saves a number instead of "Custom"
-                        "Calories": base_cal * mult, 
-                        "Protein (g)": base_pro * mult, 
-                        "Carbs (g)": base_car * mult, 
-                        "Fats (g)": base_fat * mult
+                        "Username": st.session_state.username, "Date": date_str, "Meal": c_meal, "Food Item": f"⭐ {c_name}",
+                        "Amount (g)": c_weight, "Calories": c_cal * mult, "Protein (g)": c_pro * mult, "Carbs (g)": c_car * mult, "Fats (g)": c_fat * mult
                     }])
                     conn.update(worksheet="Sheet1", data=pd.concat([global_db, new_c], ignore_index=True))
                     st.cache_data.clear()
@@ -364,8 +361,12 @@ if not todays_log.empty:
     for idx, row in todays_log.iterrows():
         with st.container():
             ca, cb, cc = st.columns([4, 1.5, 0.5])
-            with ca: st.markdown(f"**{row['Food Item']}** <br><span style='color:#8b949e; font-size:12px;'>{row['Meal']} • {row['Amount (g)']}g</span>", unsafe_allow_html=True)
-            with cb: st.markdown(f"<p style='text-align:right;'><b>{row['Calories']:.0f} kcal</b><br><span style='font-size:11px;'>P:{row['Protein (g)']:.0f} C:{row['Carbs (g)']:.0f} F:{row['Fats (g)']:.0f}</span></p>", unsafe_allow_html=True)
+            with ca: 
+                # BUG FIX: Ensure "Customg" doesn't appear
+                display_amt = f"{row['Amount (g)']}g" if row['Amount (g)'] != "Custom" else "Custom"
+                st.markdown(f"**{row['Food Item']}** <br><span style='color:#8b949e; font-size:12px;'>{row['Meal']} • {display_amt}</span>", unsafe_allow_html=True)
+            with cb: 
+                st.markdown(f"<p style='text-align:right;'><b>{row['Calories']:.0f} kcal</b><br><span style='font-size:11px;'>P:{row['Protein (g)']:.0f} C:{row['Carbs (g)']:.0f} F:{row['Fats (g)']:.0f}</span></p>", unsafe_allow_html=True)
             with cc:
                 if st.button("×", key=f"del_{idx}"):
                     conn.update(worksheet="Sheet1", data=global_db.drop(idx))
