@@ -62,4 +62,16 @@ div[data-testid="column"] button:hover {
     border-color: #58a6ff !important;
     color: #ffffff !important;
     background-color: #1f2937 !important;
+    /* style.css update */
+div[data-testid="column"] button p {
+    font-size: 10px !important; /* Smaller text for longer names */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+div[data-testid="column"] button {
+    height: 35px !important;
+    min-width: 80px !important;
+}
 }
