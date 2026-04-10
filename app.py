@@ -122,7 +122,8 @@ col_title, col_date = st.columns([2, 1])
 with col_title:
     st.title("Tracking")
 with col_date:
-    selected_date = st.date_input("Date", datetime.date.today(), label_visibility="collapsed")
+    ph_tz = pytz.timezone('Asia/Manila')
+local_today = datetime.datetime.now(ph_tz).date()
 
 date_str = selected_date.strftime("%Y-%m-%d")
 todays_log = user_log[user_log["Date"] == date_str]
