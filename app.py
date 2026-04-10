@@ -222,9 +222,6 @@ m2, m3, m4 = st.columns(3)
 m2.metric("PROTEIN", f"{total_prot:.0f}g")
 m3.metric("CARBS", f"{total_carbs:.0f}g")
 m4.metric("FATS", f"{total_fats:.0f}g")
-m2.metric("P", f"{total_prot:.0f}g")
-m3.metric("C", f"{total_carbs:.0f}g")
-m4.metric("F", f"{total_fats:.0f}g")
 
 st.divider()
 
