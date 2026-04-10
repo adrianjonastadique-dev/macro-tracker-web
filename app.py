@@ -4,6 +4,12 @@ import datetime
 import time
 import random
 from streamlit_gsheets import GSheetsConnection
+# 1. App Configuration
+st.set_page_config(page_title="Macro Tracker", layout="centered")
+
+# --- LOAD EXTERNAL CSS ---
+with open("style.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # 1. App Configuration
 st.set_page_config(page_title="Macro Tracker", layout="centered")
