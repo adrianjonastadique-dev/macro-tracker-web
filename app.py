@@ -197,8 +197,6 @@ remaining_cals = cal_goal - total_cals
 # Metric Row
 st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
 m1, m2, m3, m4 = st.columns(4)
-# --- DYNAMIC GLOW LOGIC ---
-st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
 
 # Determine the status
 is_over = total_cals > cal_goal
