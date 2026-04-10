@@ -290,6 +290,7 @@ if 'food_db' not in st.session_state:
         ["Butter", 717, 0.8, 0.1, 81.0],
         ["Peanut Butter", 588, 25.0, 20.0, 50.0],
         ["Whey Protein Concentrate", 400, 80.0, 5.0, 6.0],
+        ["Black Coffee", 3, 0, 0, 0.3],
     ]
     st.session_state.food_db = pd.DataFrame(db_raw, columns=["Food Item", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
     st.session_state.food_db = st.session_state.food_db.sort_values(by="Food Item").reset_index(drop=True)
