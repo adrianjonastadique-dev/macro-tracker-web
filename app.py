@@ -118,13 +118,22 @@ user_log = global_db[global_db["Username"] == st.session_state.username]
 # ==========================================
 # --- MAIN DASHBOARD ---
 # ==========================================
-col_title, col_date = st.columns([2, 1])
-with col_title:
-    st.title("Tracking")
-with col_date:
+# 1. Setup Timezone and Today's Date
 ph_tz = pytz.timezone('Asia/Manila')
 local_today = datetime.datetime.now(ph_tz).date()
-selected_date = st.date_input("Date", local_today, label_visibility="collapsed")
+
+col_title, col_date = st.columns([2, 1])
+
+with col_title:
+    st.title("Tracking")
+
+with col_date:
+    # Now selected_date is properly defined within the UI flow
+    selected_date = st.date_input("Date", local_today, label_visibility="collapsed")
+
+# 2. Filtering Logic
+date_str = selected_date.strftime("%Y-%m-%d")
+todays_log = user_log[user_log["Date"] == date_str]
 
 total_cals = todays_log["Calories"].sum() if not todays_log.empty else 0
 total_prot = todays_log["Protein (g)"].sum() if not todays_log.empty else 0
