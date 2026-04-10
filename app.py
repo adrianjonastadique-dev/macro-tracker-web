@@ -4,6 +4,7 @@ import datetime
 import time
 import random
 from streamlit_gsheets import GSheetsConnection
+import pytz
 
 # 1. App Configuration
 st.set_page_config(page_title="Macro Tracker", layout="centered")
