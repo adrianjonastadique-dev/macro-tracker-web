@@ -1,40 +1,36 @@
-/* Hide Streamlit Branding */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+/* style.css */
 
-/* Global Background & Font */
-.stApp {
-    background-color: #0d1117;
-    color: #c9d1d9;
-}
-
-/* Minimalist Metric Cards */
-[data-testid="stMetric"] {
+/* Base style for the Glow Card */
+.glow-card {
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #30363d;
     background-color: #161b22;
-    border: 1px solid #30363d;
-    padding: 15px;
-    border-radius: 8px;
+    text-align: center;
+    transition: all 0.5s ease;
 }
 
-/* Slick Inputs */
-.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div {
-    background-color: #0d1117 !important;
-    border: 1px solid #30363d !important;
-    color: #c9d1d9 !important;
+/* Green Glow - Within Goal */
+.glow-green {
+    border-color: #238636;
+    box-shadow: 0px 0px 15px rgba(35, 134, 54, 0.3);
 }
 
-/* Buttons */
-.stButton>button {
-    width: 100%;
-    border-radius: 6px;
-    border: 1px solid #30363d;
-    background-color: #21262d;
-    color: #c9d1d9;
-    transition: 0.2s;
+/* Red Glow - Over Goal */
+.glow-red {
+    border-color: #da3633;
+    box-shadow: 0px 0px 15px rgba(218, 54, 51, 0.4);
 }
 
-.stButton>button:hover {
-    border-color: #8b949e;
-    background-color: #30363d;
+.glow-label {
+    color: #8b949e;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.glow-value {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 5px 0;
 }
