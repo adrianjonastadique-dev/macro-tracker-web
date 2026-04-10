@@ -124,9 +124,7 @@ with col_title:
 with col_date:
 ph_tz = pytz.timezone('Asia/Manila')
 local_today = datetime.datetime.now(ph_tz).date()
-
 selected_date = st.date_input("Date", local_today, label_visibility="collapsed")
-todays_log = user_log[user_log["Date"] == date_str]
 
 total_cals = todays_log["Calories"].sum() if not todays_log.empty else 0
 total_prot = todays_log["Protein (g)"].sum() if not todays_log.empty else 0
