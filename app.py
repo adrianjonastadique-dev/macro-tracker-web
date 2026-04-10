@@ -23,6 +23,10 @@ if "num1" not in st.session_state:
     st.session_state.num1 = random.randint(1, 10)
     st.session_state.num2 = random.randint(1, 10)
 
+# Anchor the calorie goal in memory so it doesn't reset
+if "cal_goal" not in st.session_state:
+    st.session_state.cal_goal = 2000
+
 # ==========================================
 # --- TRUE AUTHENTICATION GATE ---
 # ==========================================
@@ -139,7 +143,11 @@ with st.sidebar:
     st.header(f"👤 {st.session_state.username}")
     st.divider()
     st.header("🎯 Daily Targets")
-    cal_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=2000, step=50)
+    
+    # Save the updated target to memory so it never resets
+    new_cal_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=st.session_state.cal_goal, step=50)
+    st.session_state.cal_goal = new_cal_goal
+    cal_goal = st.session_state.cal_goal
 
 st.title("📊 Daily Deficit Tracker")
 
