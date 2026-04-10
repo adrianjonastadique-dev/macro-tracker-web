@@ -197,7 +197,31 @@ remaining_cals = cal_goal - total_cals
 # Metric Row
 st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("KCALS", f"{total_cals:.0f}", f"{remaining_cals:.0f} left")
+# --- DYNAMIC GLOW LOGIC ---
+st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
+
+# Determine the status
+is_over = total_cals > cal_goal
+glow_class = "glow-red" if is_over else "glow-green"
+status_text = "OVER" if is_over else "LEFT"
+
+# Render the Slick Glow Card
+st.markdown(f"""
+    <div class="glow-card {glow_class}">
+        <div class="glow-label">Daily Energy Status</div>
+        <div class="glow-value">{total_cals:.0f} / {cal_goal} kcal</div>
+        <div style="color: {'#da3633' if is_over else '#238636'}; font-weight: bold;">
+            {abs(remaining_cals):.0f} kcal {status_text}
+        </div>
+    </div>
+    <br>
+""", unsafe_allow_html=True)
+
+# Keep the other macros in standard minimalist columns
+m2, m3, m4 = st.columns(3)
+m2.metric("PROTEIN", f"{total_prot:.0f}g")
+m3.metric("CARBS", f"{total_carbs:.0f}g")
+m4.metric("FATS", f"{total_fats:.0f}g")
 m2.metric("P", f"{total_prot:.0f}g")
 m3.metric("C", f"{total_carbs:.0f}g")
 m4.metric("F", f"{total_fats:.0f}g")
