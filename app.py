@@ -6,7 +6,7 @@ from streamlit_gsheets import GSheetsConnection
 # 1. App Configuration
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
-# Establish the master connection early so the login screen can use it
+# Establish the master connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 if "authenticated" not in st.session_state:
@@ -29,27 +29,32 @@ if not st.session_state.authenticated:
                 users_db = conn.read(worksheet="Users", ttl=0)
                 users_db = users_db.dropna(subset=["Username"]) # Ignore empty rows
                 
-                # Check if the username exists in the sheet
+                # Check if the username exists
                 user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
                 
                 if not user_match.empty:
-                    # Grab the correct password from the database
                     correct_pwd = str(user_match.iloc[0]["Password"]).strip()
                     
                     if entered_pwd.strip() == correct_pwd:
                         # Success! Let them in.
                         st.session_state.authenticated = True
                         st.session_state.username = entered_user.strip()
+                        
+                        # Load their specific calorie goal (default to 2000 if blank)
+                        goal = user_match.iloc[0].get("Calorie_Goal", 2000)
+                        if pd.isna(goal): goal = 2000
+                        st.session_state.cal_goal = int(goal)
+                        
                         st.rerun()
                     else:
                         st.error("❌ Incorrect password.")
                 else:
                     st.error("❌ Username not found. Please check your credentials.")
             except Exception as e:
-                st.error("🚨 Database connection error. Please ensure the 'Users' tab exists in your Google Sheet.")
+                st.error("🚨 Database connection error. Please ensure the 'Users' tab exists with Username, Password, and Calorie_Goal columns.")
         else:
             st.warning("Please enter both a Username and Password.")
-    st.stop() # Stops the rest of the app from loading until unlocked
+    st.stop()
 
 # ==========================================
 # --- MAIN APP LOADS ONLY AFTER LOGIN ---
@@ -59,7 +64,18 @@ with st.sidebar:
     st.header(f"👤 {st.session_state.username}")
     st.divider()
     st.header("🎯 Daily Targets")
-    cal_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=2000, step=50)
+    
+    # Render the input box using their saved goal
+    new_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=st.session_state.cal_goal, step=50)
+    
+    # If they change the goal, save it permanently to their database profile
+    if new_goal != st.session_state.cal_goal:
+        st.session_state.cal_goal = new_goal
+        users_db = conn.read(worksheet="Users", ttl=0)
+        # Locate the user's row and update the Calorie_Goal column
+        users_db.loc[users_db["Username"] == st.session_state.username, "Calorie_Goal"] = new_goal
+        conn.update(worksheet="Users", data=users_db)
+        st.success("Target Saved!")
 
 st.title("📊 Daily Deficit Tracker")
 
@@ -71,20 +87,17 @@ with col_date:
 # --- THE CLOUD DATABASE (MAIN LOG) ---
 # ==========================================
 
-# Fetch the ENTIRE master food database from Sheet1
 global_db = conn.read(worksheet="Sheet1", ttl=0)
 global_db = global_db.dropna(how="all")
 
-# Armor: If the sheet is completely blank, build the columns so Python doesn't crash
 if "Username" not in global_db.columns:
     global_db = pd.DataFrame(columns=[
         "Username", "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"
     ])
 
-# Force dates to be text to prevent matching bugs
 global_db["Date"] = global_db["Date"].astype(str)
 
-# THE BOUNCER: Filter the database so this user ONLY sees their own data
+# Filter the database so this user ONLY sees their own data
 user_log = global_db[global_db["Username"] == st.session_state.username]
 
 # Filter the user's data for the specific day they selected
@@ -327,13 +340,13 @@ total_cals = todays_log["Calories"].sum() if not todays_log.empty else 0
 total_prot = todays_log["Protein (g)"].sum() if not todays_log.empty else 0
 total_carbs = todays_log["Carbs (g)"].sum() if not todays_log.empty else 0
 total_fats = todays_log["Fats (g)"].sum() if not todays_log.empty else 0
-remaining_cals = cal_goal - total_cals
+remaining_cals = st.session_state.cal_goal - total_cals
 
 st.write("**Calorie Progress**")
-st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
+st.progress(min(max(total_cals / st.session_state.cal_goal, 0.0), 1.0))
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Target", f"{cal_goal}")
+c1.metric("Target", f"{st.session_state.cal_goal}")
 c2.metric("Consumed", f"{total_cals:.0f}")
 c3.metric("Remaining", f"{remaining_cals:.0f}")
 
