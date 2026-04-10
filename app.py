@@ -356,6 +356,47 @@ if 'food_db' not in st.session_state:
 # ==========================================
 # --- ACTION AREA (LOGGING) ---
 # ==========================================
+# ==========================================
+# --- QUICK-LOG FAVORITES ---
+# ==========================================
+st.write("### ⚡ Quick Log")
+
+# Define your staples and their standard serving size in grams
+favorites = [
+    ("🍗 Chicken", "Chicken Breast (Grilled)", 150),
+    ("🍚 Rice", "White Rice (Steamed)", 200),
+    ("🥔 Potato", "White Potato (Boiled)", 150),
+    ("🍳 Eggs", "Egg (Whole, Boiled)", 100),
+    ("🥤 Protein", "Whey Protein Concentrate", 30)
+]
+
+# Create a row of columns for the buttons
+cols = st.columns(len(favorites))
+
+for i, (label, food_name, std_qty) in enumerate(favorites):
+    if cols[i].button(label):
+        # Fetch the macros from your session_state food_db
+        food_row = st.session_state.food_db[st.session_state.food_db["Food Item"] == food_name].iloc[0]
+        mult = std_qty / 100
+        
+        # Build the entry
+        new_entry = pd.DataFrame([{
+            "Username": st.session_state.username,
+            "Date": date_str, 
+            "Meal": "Meal 1", # Defaulting to M1 for quick logs
+            "Food Item": f"⚡ {food_name}",
+            "Amount (g)": std_qty, 
+            "Calories": food_row["Calories"] * mult,
+            "Protein (g)": food_row["Protein (g)"] * mult,
+            "Carbs (g)": food_row["Carbs (g)"] * mult,
+            "Fats (g)": food_row["Fats (g)"] * mult
+        }])
+        
+        # Save and Rerun
+        updated_db = pd.concat([global_db, new_entry], ignore_index=True)
+        conn.update(worksheet="Sheet1", data=updated_db)
+        st.cache_data.clear()
+        st.rerun()
 with st.expander("➕ Log Food", expanded=False):
     tab1, tab2 = st.tabs(["📚 Database", "✍️ Manual"])
     
