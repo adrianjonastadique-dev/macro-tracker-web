@@ -4,6 +4,7 @@ import plotly.express as px
 import datetime
 import calendar
 import time
+import random
 from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Smart Budget", layout="wide")
@@ -17,51 +18,105 @@ if "budget_auth" not in st.session_state:
     st.session_state.budget_auth = False
 
 # ==========================================
-# --- SECURE LOGIN WITH BOT PROTECTION ---
+# --- SECURE LOGIN & REGISTRATION ---
 # ==========================================
 if "last_request" not in st.session_state:
     st.session_state.last_request = 0
 
+# Generate a random math problem once per session for the CAPTCHA
+if "num1" not in st.session_state:
+    st.session_state.num1 = random.randint(1, 10)
+    st.session_state.num2 = random.randint(1, 10)
+
 if not st.session_state.budget_auth:
     st.title("💼 Smart Finance Tracker")
-    st.info("Enter your Client ID to access your financial dashboard.")
+    st.info("Log in to your dashboard or create a new account below.")
     
-    with st.form("login_form"):
-        entered_user = st.text_input("Username / Client ID")
-        entered_pwd = st.text_input("Password", type="password")
-        
-        # Honeypot: Invisible to humans, traps bots that auto-fill everything
-        st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
-        trap = st.text_input("bot_trap", label_visibility="collapsed")
-        
-        if st.form_submit_button("Secure Login"):
-            current_time = time.time()
+    # Create two clean tabs for Login and Registration
+    tab_login, tab_register = st.tabs(["🔐 Secure Login", "📝 Create Account"])
+    
+    # --- TAB 1: LOGIN ---
+    with tab_login:
+        with st.form("login_form"):
+            entered_user = st.text_input("Username / Client ID")
+            entered_pwd = st.text_input("Password", type="password")
             
-            # Layer 1: Cooldown Timer (3 seconds)
-            if current_time - st.session_state.last_request < 3.0:
-                st.error("⏳ Please wait a few seconds before trying again.")
-                st.stop()
-            st.session_state.last_request = current_time
+            # Honeypot: Invisible to humans, traps bots that auto-fill everything
+            st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
+            trap = st.text_input("bot_trap", label_visibility="collapsed")
             
-            # Layer 2: Honeypot Trap
-            if trap != "":
-                st.warning("Automated behavior detected. Request blocked.")
-                st.stop()
+            if st.form_submit_button("Login"):
+                current_time = time.time()
+                
+                # Layer 1: Cooldown Timer (3 seconds)
+                if current_time - st.session_state.last_request < 3.0:
+                    st.error("⏳ Please wait a few seconds before trying again.")
+                    st.stop()
+                st.session_state.last_request = current_time
+                
+                # Layer 2: Honeypot Trap
+                if trap != "":
+                    st.warning("Automated behavior detected. Request blocked.")
+                    st.stop()
+                
+                # Standard Authentication
+                if entered_user and entered_pwd:
+                    try:
+                        users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
+                        user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
+                        
+                        if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
+                            st.session_state.budget_auth = True
+                            st.session_state.username = entered_user.strip()
+                            st.rerun()
+                        else:
+                            st.error("❌ Invalid credentials.")
+                    except Exception as e:
+                        st.error("🚨 Database error. Ensure the 'Users' tab is set up correctly in your Budget_DB.")
+                        
+    # --- TAB 2: REGISTRATION ---
+    with tab_register:
+        with st.form("registration_form", clear_on_submit=True):
+            st.write("**Register a New Account**")
+            new_user = st.text_input("New Username")
+            new_pwd = st.text_input("New Password", type="password")
             
-            # Standard Authentication
-            if entered_user and entered_pwd:
-                try:
-                    users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
-                    user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
+            # The CAPTCHA challenge
+            captcha_ans = st.number_input(f"Prove you are human: What is {st.session_state.num1} + {st.session_state.num2}?", step=1, value=None)
+            
+            if st.form_submit_button("Create Account"):
+                # 1. Verify the math
+                if captcha_ans != (st.session_state.num1 + st.session_state.num2):
+                    st.error("❌ Incorrect CAPTCHA. Try again.")
+                    st.stop()
+                
+                # 2. Ensure fields aren't blank
+                if not new_user or not new_pwd:
+                    st.error("⚠️ Username and Password cannot be blank.")
+                    st.stop()
                     
-                    if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
-                        st.session_state.budget_auth = True
-                        st.session_state.username = entered_user.strip()
-                        st.rerun()
+                # 3. Check database and register
+                try:
+                    users_db = conn.read(worksheet="Users", ttl=0).dropna(how="all")
+                    # Ensure columns exist if the sheet is completely blank
+                    if "Username" not in users_db.columns:
+                        users_db = pd.DataFrame(columns=["Username", "Password"])
+                        
+                    if new_user.strip() in users_db["Username"].astype(str).values:
+                        st.error("⚠️ That Username is already taken. Please choose another.")
                     else:
-                        st.error("❌ Invalid credentials.")
+                        new_account = pd.DataFrame([{"Username": new_user.strip(), "Password": new_pwd.strip()}])
+                        updated_users = pd.concat([users_db, new_account], ignore_index=True)
+                        conn.update(worksheet="Users", data=updated_users)
+                        
+                        st.success("✅ Account created successfully! You can now switch to the Login tab.")
+                        
+                        # Reset CAPTCHA for the next person
+                        st.session_state.num1 = random.randint(1, 10)
+                        st.session_state.num2 = random.randint(1, 10)
                 except Exception as e:
-                    st.error("🚨 Database error. Ensure the 'Users' tab is set up correctly in your Budget_DB.")
+                    st.error("🚨 Database error during registration. Ensure 'Users' tab exists.")
+
     st.stop()
 
 # ==========================================
