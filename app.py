@@ -23,16 +23,29 @@ if "num1" not in st.session_state:
     st.session_state.num1 = random.randint(1, 10)
     st.session_state.num2 = random.randint(1, 10)
 
-# ==========================================
-# --- THE FIX: BULLETPROOF MEMORY VAULT ---
-# ==========================================
-# Initialize the target calories in global memory
+# Initialize the target calories in global memory (Fallback)
 if "target_calories" not in st.session_state:
     st.session_state.target_calories = 2000
 
-# Callback function: This only runs when you actively click the +/- on the widget
+# ==========================================
+# --- THE FIX: CLOUD-SYNCED CALLBACK ---
+# ==========================================
 def update_calorie_goal():
-    st.session_state.target_calories = st.session_state.calorie_input_widget
+    new_goal = st.session_state.calorie_input_widget
+    st.session_state.target_calories = new_goal
+    
+    # Silently save the new goal directly to the user's profile in Google Sheets
+    try:
+        users_db = conn.read(worksheet="Users", ttl=0)
+        # Ensure the column exists for older accounts
+        if "TargetCalories" not in users_db.columns:
+            users_db["TargetCalories"] = 2000
+            
+        # Find the logged-in user and update their specific goal
+        users_db.loc[users_db["Username"].astype(str) == st.session_state.username, "TargetCalories"] = new_goal
+        conn.update(worksheet="Users", data=users_db)
+    except Exception as e:
+        pass # Failsafe so it doesn't interrupt the user experience
 
 # ==========================================
 # --- TRUE AUTHENTICATION GATE ---
@@ -84,6 +97,13 @@ if not st.session_state.authenticated:
                                 # Success! Let them in.
                                 st.session_state.authenticated = True
                                 st.session_state.username = entered_user.strip()
+                                
+                                # FETCH SAVED CALORIE GOAL FROM CLOUD
+                                if "TargetCalories" in user_match.columns and pd.notna(user_match.iloc[0]["TargetCalories"]):
+                                    st.session_state.target_calories = int(user_match.iloc[0]["TargetCalories"])
+                                else:
+                                    st.session_state.target_calories = 2000
+                                    
                                 st.rerun()
                             else:
                                 st.error("❌ Incorrect password.")
@@ -122,12 +142,17 @@ if not st.session_state.authenticated:
                     
                     # Ensure columns exist if the sheet is completely blank
                     if "Username" not in users_db.columns:
-                        users_db = pd.DataFrame(columns=["Username", "Password"])
+                        users_db = pd.DataFrame(columns=["Username", "Password", "TargetCalories"])
                         
                     if new_user.strip() in users_db["Username"].astype(str).values:
                         st.error("⚠️ That Username is already taken. Please choose another.")
                     else:
-                        new_account = pd.DataFrame([{"Username": new_user.strip(), "Password": new_pwd.strip()}])
+                        # Register new user with a default goal of 2000
+                        new_account = pd.DataFrame([{
+                            "Username": new_user.strip(), 
+                            "Password": new_pwd.strip(),
+                            "TargetCalories": 2000
+                        }])
                         updated_users = pd.concat([users_db, new_account], ignore_index=True)
                         conn.update(worksheet="Users", data=updated_users)
                         
@@ -151,7 +176,7 @@ with st.sidebar:
     st.divider()
     st.header("🎯 Daily Targets")
     
-    # We connect the widget to the global memory via the value parameter and the callback
+    # Connected to the memory vault and the cloud-sync callback
     st.number_input(
         "Calorie Goal:", 
         min_value=1000, 
@@ -162,7 +187,6 @@ with st.sidebar:
         on_change=update_calorie_goal
     )
     
-    # Set the variable used by the rest of the app to the secure global memory
     cal_goal = st.session_state.target_calories
 
 st.title("📊 Daily Deficit Tracker")
