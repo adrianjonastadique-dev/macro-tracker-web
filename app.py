@@ -321,14 +321,33 @@ with st.expander("➕ Log Food", expanded=False):
         with st.form("manual_log", clear_on_submit=True):
             c_f1, c_f2 = st.columns([1, 2])
             c_meal = c_f1.selectbox("Meal", ["Meal 1", "Meal 2", "Meal 3", "Snack"], key="c_meal")
-            c_name = c_f2.text_input("Name")
+            c_name = c_f2.text_input("Name (e.g., Mom's Adobo)")
+            
+            # Adding weight input for the custom item
+            c_weight = st.number_input("Amount (g)", min_value=1, value=100, step=10)
+            st.caption("Enter macros per 100g below:")
+            
             m1, m2, m3, m4 = st.columns(4)
-            c_cal, c_pro, c_car, c_fat = m1.number_input("Kcals"), m2.number_input("P"), m3.number_input("C"), m4.number_input("F")
+            # Users enter the macros PER 100g
+            base_cal = m1.number_input("Kcals", min_value=0.0)
+            base_pro = m2.number_input("P", min_value=0.0)
+            base_car = m3.number_input("C", min_value=0.0)
+            base_fat = m4.number_input("F", min_value=0.0)
+            
             if st.form_submit_button("Log Custom"):
                 if c_name:
+                    # Calculate final macros based on the weight entered
+                    mult = c_weight / 100
                     new_c = pd.DataFrame([{
-                        "Username": st.session_state.username, "Date": date_str, "Meal": c_meal, "Food Item": f"⭐ {c_name}",
-                        "Amount (g)": "Custom", "Calories": c_cal, "Protein (g)": c_pro, "Carbs (g)": c_car, "Fats (g)": c_fat
+                        "Username": st.session_state.username, 
+                        "Date": date_str, 
+                        "Meal": c_meal, 
+                        "Food Item": f"⭐ {c_name}",
+                        "Amount (g)": c_weight, # Now saves a number instead of "Custom"
+                        "Calories": base_cal * mult, 
+                        "Protein (g)": base_pro * mult, 
+                        "Carbs (g)": base_car * mult, 
+                        "Fats (g)": base_fat * mult
                     }])
                     conn.update(worksheet="Sheet1", data=pd.concat([global_db, new_c], ignore_index=True))
                     st.cache_data.clear()
