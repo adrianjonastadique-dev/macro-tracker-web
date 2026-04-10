@@ -1,0 +1,40 @@
+/* Hide Streamlit Branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Global Background & Font */
+.stApp {
+    background-color: #0d1117;
+    color: #c9d1d9;
+}
+
+/* Minimalist Metric Cards */
+[data-testid="stMetric"] {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+/* Slick Inputs */
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div {
+    background-color: #0d1117 !important;
+    border: 1px solid #30363d !important;
+    color: #c9d1d9 !important;
+}
+
+/* Buttons */
+.stButton>button {
+    width: 100%;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background-color: #21262d;
+    color: #c9d1d9;
+    transition: 0.2s;
+}
+
+.stButton>button:hover {
+    border-color: #8b949e;
+    background-color: #30363d;
+}
