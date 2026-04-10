@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -112,6 +113,17 @@ global_db = conn.read(worksheet="Sheet1", ttl=0).dropna(how="all")
 if "Username" not in global_db.columns:
     global_db = pd.DataFrame(columns=["Username", "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
 
+if st.button("Logout"):
+        # CLEAR SESSION ID IN CLOUD ON LOGOUT
+        try:
+            users_db = conn.read(worksheet="Users", ttl=0)
+            users_db.loc[users_db["Username"] == st.session_state.username, "SessionID"] = ""
+            conn.update(worksheet="Users", data=users_db)
+        except:
+            pass
+        st.session_state.authenticated = False
+        st.rerun()
+    
 global_db["Date"] = global_db["Date"].astype(str)
 user_log = global_db[global_db["Username"] == st.session_state.username]
 
