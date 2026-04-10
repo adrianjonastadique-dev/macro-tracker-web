@@ -23,7 +23,7 @@ if "num1" not in st.session_state:
     st.session_state.num1 = random.randint(1, 10)
     st.session_state.num2 = random.randint(1, 10)
 
-# Anchor the calorie goal in memory so it doesn't reset
+# THE FIX: Initialize the memory slot ONCE. 
 if "cal_goal" not in st.session_state:
     st.session_state.cal_goal = 2000
 
@@ -144,9 +144,10 @@ with st.sidebar:
     st.divider()
     st.header("🎯 Daily Targets")
     
-    # Save the updated target to memory so it never resets
-    new_cal_goal = st.number_input("Calorie Goal:", min_value=1000, max_value=5000, value=st.session_state.cal_goal, step=50)
-    st.session_state.cal_goal = new_cal_goal
+    # THE FIX: By using key="cal_goal", Streamlit natively anchors this box to the memory slot we created at the top.
+    st.number_input("Calorie Goal:", min_value=1000, max_value=5000, step=50, key="cal_goal")
+    
+    # Now we just read whatever the memory slot says
     cal_goal = st.session_state.cal_goal
 
 st.title("📊 Daily Deficit Tracker")
