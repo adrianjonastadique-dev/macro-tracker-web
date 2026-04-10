@@ -122,10 +122,10 @@ col_title, col_date = st.columns([2, 1])
 with col_title:
     st.title("Tracking")
 with col_date:
-    ph_tz = pytz.timezone('Asia/Manila')
+ph_tz = pytz.timezone('Asia/Manila')
 local_today = datetime.datetime.now(ph_tz).date()
 
-date_str = selected_date.strftime("%Y-%m-%d")
+selected_date = st.date_input("Date", local_today, label_visibility="collapsed")
 todays_log = user_log[user_log["Date"] == date_str]
 
 total_cals = todays_log["Calories"].sum() if not todays_log.empty else 0
