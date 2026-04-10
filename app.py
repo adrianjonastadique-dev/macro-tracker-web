@@ -7,7 +7,50 @@ from streamlit_gsheets import GSheetsConnection
 
 # 1. App Configuration
 st.set_page_config(page_title="Macro Tracker", layout="centered")
+# --- MINIMALIST STYLING ---
+st.markdown("""
+    <style>
+    /* Hide Streamlit Branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Global Background & Font */
+    .stApp {
+        background-color: #0e1117;
+    }
+    
+    /* Minimalist Metric Cards */
+    [data-testid="metric-container"] {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        padding: 15px;
+        border-radius: 8px;
+    }
+    
+    /* Clean Tab Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        padding: 8px 16px;
+        color: #8b949e;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #161b22 !important;
+        color: #58a6ff !important;
+    }
 
+    /* Slick Inputs */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input {
+        background-color: #0d1117;
+        border: 1px solid #30363d;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 # Establish the master connection early so the login screen can use it
 conn = st.connection("gsheets", type=GSheetsConnection)
 
