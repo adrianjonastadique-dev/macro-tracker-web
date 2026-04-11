@@ -53,16 +53,29 @@ if not st.session_state.authenticated:
                             users_db.at[idx, "SessionID"] = st.session_state.session_id
                             conn.update(worksheet="Users", data=users_db)
                             
+                            if entered_user.strip() and entered_pwd.strip():
+                    try:
+                        # 1. Read data and explicitly force SessionID to string
+                        users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
+                        
+                        if "SessionID" not in users_db.columns:
+                            users_db["SessionID"] = ""
+                        
+                        # FORCE the column to be object (string) type
+                        users_db["SessionID"] = users_db["SessionID"].astype(str)
+                        
+                        user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
+                        
+                        if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
+                            idx = user_match.index[0]
+                            # 2. Write the string UUID
+                            users_db.at[idx, "SessionID"] = str(st.session_state.session_id)
+                            
+                            conn.update(worksheet="Users", data=users_db)
+                            
                             st.session_state.authenticated = True
                             st.session_state.username = entered_user.strip()
-                            if "TargetCalories" in users_db.columns:
-                                st.session_state.target_calories = int(users_db.at[idx, "TargetCalories"])
-                            st.rerun()
-                        else:
-                            st.error("Invalid credentials.")
-                    except Exception as e:
-                        st.error(f"Login error: {str(e)}")
-    st.stop()
+                            # ... rest of your login logic
 
 # --- HARD ANTI-SHARING CHECK ---
 try:
