@@ -53,7 +53,7 @@ if not st.session_state.authenticated:
                             users_db.at[idx, "SessionID"] = st.session_state.session_id
                             conn.update(worksheet="Users", data=users_db)
                             
-                            if entered_user.strip() and entered_pwd.strip():
+                 if entered_user.strip() and entered_pwd.strip():
                     try:
                         # 1. Read data and explicitly force SessionID to string
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
