@@ -16,7 +16,7 @@ try:
     with open("style.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
-    pass # Fails silently if no CSS file is present yet
+    pass 
 
 # Establish connection
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -45,15 +45,16 @@ def update_calorie_goal():
         pass
 
 # ==========================================
-# --- 2. AUTHENTICATION GATE ---
+# --- 2. AUTHENTICATION & PAYWALL GATE ---
 # ==========================================
 if not st.session_state.authenticated:
     st.title("🔒 Access")
-    tab_login, tab_register = st.tabs(["Login", "Create Account"])
+    tab_login, tab_register = st.tabs(["Login", "Create Account (Free Trial)"])
     
     with tab_login:
         with st.form("login_form"):
-            entered_user = st.text_input("Username")
+            # Switched to Email for Login
+            entered_user = st.text_input("Email Address")
             entered_pwd = st.text_input("Password", type="password")
             st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
             trap = st.text_input("bot_trap", label_visibility="collapsed")
@@ -71,14 +72,32 @@ if not st.session_state.authenticated:
                         # Fetch fresh data
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
                         
-                        # Initialize column if missing, and FORCE string type to prevent float64 crash
+                        # Initialize columns if missing, and FORCE string type to prevent float64 crash
                         if "SessionID" not in users_db.columns:
                             users_db["SessionID"] = ""
                         users_db["SessionID"] = users_db["SessionID"].astype(str)
                         
+                        # Match email (stored in Username column)
                         user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
                         
                         if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
+                            
+                            # --- 🛑 FREE TRIAL PAYWALL CHECK 🛑 ---
+                            join_date_str = str(user_match.iloc[0].get("JoinDate", "2026-01-01"))
+                            is_paid = str(user_match.iloc[0].get("IsPaid", "False")).strip().upper() == "TRUE"
+                            
+                            try:
+                                join_date = datetime.datetime.strptime(join_date_str, "%Y-%m-%d").date()
+                                days_active = (datetime.date.today() - join_date).days
+                            except:
+                                days_active = 0 
+                                
+                            if days_active > 7 and not is_paid:
+                                st.error("⏳ Your 7-Day Free Trial has expired!")
+                                st.markdown("[💳 Click here to purchase the Full Lifetime Version for $75](https://your-payment-link.com)")
+                                st.stop() 
+                            # --------------------------------------
+
                             # Cloud Session Lock: Kick out other devices
                             idx = user_match.index[0]
                             users_db.at[idx, "SessionID"] = str(st.session_state.session_id)
@@ -97,21 +116,36 @@ if not st.session_state.authenticated:
     
     with tab_register:
         with st.form("reg_form", clear_on_submit=True):
-            n_user = st.text_input("New Username")
+            # ANTI-FREELOADER: Require Email
+            n_user = st.text_input("Email Address")
             n_pwd = st.text_input("New Password", type="password")
             ans = st.number_input(f"Captcha: {st.session_state.num1} + {st.session_state.num2}", step=1, value=None)
-            if st.form_submit_button("Register"):
+            
+            if st.form_submit_button("Start 7-Day Free Trial"):
                 if ans == (st.session_state.num1 + st.session_state.num2) and n_user.strip() and n_pwd.strip():
-                    u_db = conn.read(worksheet="Users", ttl=0).dropna(how="all")
-                    if "SessionID" not in u_db.columns: u_db["SessionID"] = ""
-                    u_db["SessionID"] = u_db["SessionID"].astype(str)
                     
-                    if n_user.strip() in u_db["Username"].astype(str).values:
-                        st.error("Taken.")
+                    # Basic Email Validation
+                    if "@" not in n_user or "." not in n_user:
+                        st.error("❗ Please enter a valid email address.")
                     else:
-                        new_acc = pd.DataFrame([{"Username": n_user.strip(), "Password": n_pwd.strip(), "TargetCalories": 2000, "SessionID": ""}])
-                        conn.update(worksheet="Users", data=pd.concat([u_db, new_acc], ignore_index=True))
-                        st.success("Account created! Login now.")
+                        u_db = conn.read(worksheet="Users", ttl=0).dropna(how="all")
+                        if "SessionID" not in u_db.columns: u_db["SessionID"] = ""
+                        u_db["SessionID"] = u_db["SessionID"].astype(str)
+                        
+                        if n_user.strip() in u_db["Username"].astype(str).values:
+                            st.error("❗ Email already registered.")
+                        else:
+                            today_str = datetime.date.today().strftime("%Y-%m-%d")
+                            new_acc = pd.DataFrame([{
+                                "Username": n_user.strip(), 
+                                "Password": n_pwd.strip(), 
+                                "TargetCalories": 2000, 
+                                "SessionID": "",
+                                "JoinDate": today_str,
+                                "IsPaid": False
+                            }])
+                            conn.update(worksheet="Users", data=pd.concat([u_db, new_acc], ignore_index=True))
+                            st.success("Account created! Your 7-day free trial starts now. Please Login.")
     st.stop()
 
 # ==========================================
