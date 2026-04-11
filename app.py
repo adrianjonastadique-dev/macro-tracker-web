@@ -42,36 +42,49 @@ if not st.session_state.authenticated:
             if st.form_submit_button("Sign In"):
                 if entered_user.strip() and entered_pwd.strip():
                     try:
-                        users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
-                        if "SessionID" not in users_db.columns: users_db["SessionID"] = ""
-                        
-                        user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
-                        
-                        if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
-                            # Cloud Session Lock: Writes current session ID to the sheet
-                            idx = user_match.index[0]
-                            users_db.at[idx, "SessionID"] = st.session_state.session_id
-                            conn.update(worksheet="Users", data=users_db)
-                            
-                 if entered_user.strip() and entered_pwd.strip():
+                       with st.form("login_form"):
+            entered_user = st.text_input("Username")
+            entered_pwd = st.text_input("Password", type="password")
+            st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
+            trap = st.text_input("bot_trap", label_visibility="collapsed")
+            
+            if st.form_submit_button("Sign In"):
+                current_time = time.time()
+                if current_time - st.session_state.last_request < 3.0:
+                    st.error("⏳ Please wait...")
+                    st.stop()
+                st.session_state.last_request = current_time
+                if trap != "": st.stop()
+                
+                if entered_user.strip() and entered_pwd.strip():
                     try:
-                        # 1. Read data and explicitly force SessionID to string
+                        # 1. Read data and immediately cast SessionID to string to avoid float64 errors
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
                         
                         if "SessionID" not in users_db.columns:
                             users_db["SessionID"] = ""
-                        
-                        # FORCE the column to be object (string) type
+                            
+                        # Force pandas to treat this as text
                         users_db["SessionID"] = users_db["SessionID"].astype(str)
                         
                         user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
                         
                         if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
+                            # Update Session ID in Cloud
                             idx = user_match.index[0]
-                            # 2. Write the string UUID
                             users_db.at[idx, "SessionID"] = str(st.session_state.session_id)
                             
                             conn.update(worksheet="Users", data=users_db)
+                            
+                            st.session_state.authenticated = True
+                            st.session_state.username = entered_user.strip()
+                            if "TargetCalories" in user_match.columns and pd.notna(user_match.iloc[0]["TargetCalories"]):
+                                st.session_state.target_calories = int(user_match.iloc[0]["TargetCalories"])
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials.")
+                    except Exception as e:
+                        st.error(f"Login error: {str(e)}")
                             
                             st.session_state.authenticated = True
                             st.session_state.username = entered_user.strip()
