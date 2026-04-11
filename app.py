@@ -56,46 +56,28 @@ if not st.session_state.authenticated:
             st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
             trap = st.text_input("bot_trap", label_visibility="collapsed")
             
-           if st.form_submit_button("Sign In"):
+            if st.form_submit_button("Sign In"):
                 current_time = time.time()
                 if current_time - st.session_state.last_request < 3.0:
                     st.error("⏳ Please wait...")
                     st.stop()
                 st.session_state.last_request = current_time
+                if trap != "": st.stop()
                 
                 if entered_user.strip() and entered_pwd.strip():
                     try:
-                        # 1. Read fresh data
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
-                        
-                        # 2. Ensure SessionID column exists in the dataframe
-                        if "SessionID" not in users_db.columns:
-                            users_db["SessionID"] = ""
-                            
                         user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
-                        
                         if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
-                            # 3. Target the specific row index for the update
-                            idx = user_match.index[0]
-                            users_db.at[idx, "SessionID"] = st.session_state.session_id
-                            
-                            # 4. Push the update back to the Cloud
-                            conn.update(worksheet="Users", data=users_db)
-                            
-                            # 5. Finalize local authentication
                             st.session_state.authenticated = True
                             st.session_state.username = entered_user.strip()
-                            
-                            # Load target calories if available
-                            if "TargetCalories" in users_db.columns:
-                                st.session_state.target_calories = int(users_db.at[idx, "TargetCalories"])
-                            
-                            st.success("Login Successful!")
+                            if "TargetCalories" in user_match.columns and pd.notna(user_match.iloc[0]["TargetCalories"]):
+                                st.session_state.target_calories = int(user_match.iloc[0]["TargetCalories"])
                             st.rerun()
                         else:
                             st.error("Invalid credentials.")
                     except Exception as e:
-                        st.error(f"Write Error: {str(e)}")
+                        st.error(f"Database error: {str(e)}")
     
     with tab_register:
         with st.form("reg_form", clear_on_submit=True):
@@ -131,17 +113,6 @@ global_db = conn.read(worksheet="Sheet1", ttl=0).dropna(how="all")
 if "Username" not in global_db.columns:
     global_db = pd.DataFrame(columns=["Username", "Date", "Meal", "Food Item", "Amount (g)", "Calories", "Protein (g)", "Carbs (g)", "Fats (g)"])
 
-if st.button("Logout"):
-        # CLEAR SESSION ID IN CLOUD ON LOGOUT
-        try:
-            users_db = conn.read(worksheet="Users", ttl=0)
-            users_db.loc[users_db["Username"] == st.session_state.username, "SessionID"] = ""
-            conn.update(worksheet="Users", data=users_db)
-        except:
-            pass
-        st.session_state.authenticated = False
-        st.rerun()
-    
 global_db["Date"] = global_db["Date"].astype(str)
 user_log = global_db[global_db["Username"] == st.session_state.username]
 
