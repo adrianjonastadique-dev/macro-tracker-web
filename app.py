@@ -12,6 +12,9 @@ from streamlit_gsheets import GSheetsConnection
 # ==========================================
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
+# Replace this with your actual Lemon Squeezy link!
+CHECKOUT_LINK = "https://borie2.lemonsqueezy.com/checkout/buy/60d50b57-09bc-4df9-8f0c-fd522485d6e7"
+
 try:
     with open("style.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -33,6 +36,10 @@ if "target_calories" not in st.session_state:
     st.session_state.target_calories = 2000
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+if "is_paid" not in st.session_state:
+    st.session_state.is_paid = False
+if "join_date_str" not in st.session_state:
+    st.session_state.join_date_str = "2026-01-01"
 
 def update_calorie_goal():
     new_goal = st.session_state.calorie_input_widget
@@ -45,7 +52,7 @@ def update_calorie_goal():
         pass
 
 # ==========================================
-# --- 2. AUTHENTICATION & PAYWALL GATE ---
+# --- 2. AUTHENTICATION ---
 # ==========================================
 if not st.session_state.authenticated:
     st.title("🔒 Access")
@@ -53,7 +60,6 @@ if not st.session_state.authenticated:
     
     with tab_login:
         with st.form("login_form"):
-            # Switched to Email for Login
             entered_user = st.text_input("Email Address")
             entered_pwd = st.text_input("Password", type="password")
             st.markdown('<style>div[data-testid="stTextInput"]:has(input[aria-label="bot_trap"]) {display: none;}</style>', unsafe_allow_html=True)
@@ -72,40 +78,25 @@ if not st.session_state.authenticated:
                         # Fetch fresh data
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
                         
-                        # Initialize columns if missing, and FORCE string type to prevent float64 crash
                         if "SessionID" not in users_db.columns:
                             users_db["SessionID"] = ""
                         users_db["SessionID"] = users_db["SessionID"].astype(str)
                         
-                        # Match email (stored in Username column)
                         user_match = users_db[users_db["Username"].astype(str) == entered_user.strip()]
                         
                         if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
                             
-                            # --- 🛑 FREE TRIAL PAYWALL CHECK 🛑 ---
-                            join_date_str = str(user_match.iloc[0].get("JoinDate", "2026-01-01"))
-                            is_paid = str(user_match.iloc[0].get("IsPaid", "False")).strip().upper() == "TRUE"
-                            
-                            try:
-                                join_date = datetime.datetime.strptime(join_date_str, "%Y-%m-%d").date()
-                                days_active = (datetime.date.today() - join_date).days
-                            except:
-                                days_active = 0 
-                                
-                            if days_active > 7 and not is_paid:
-                                st.error("⏳ Your 7-Day Free Trial has expired!")
-                                st.markdown("[💳 Click here to purchase the Full Lifetime Version for $75](https://your-payment-link.com)")
-                                st.stop() 
-                            # --------------------------------------
-
                             # Cloud Session Lock: Kick out other devices
                             idx = user_match.index[0]
                             users_db.at[idx, "SessionID"] = str(st.session_state.session_id)
                             conn.update(worksheet="Users", data=users_db)
                             
-                            # Finalize Login
+                            # Finalize Login & Grab Trial Variables
                             st.session_state.authenticated = True
                             st.session_state.username = entered_user.strip()
+                            st.session_state.join_date_str = str(user_match.iloc[0].get("JoinDate", "2026-01-01"))
+                            st.session_state.is_paid = str(user_match.iloc[0].get("IsPaid", "False")).strip().upper() == "TRUE"
+                            
                             if "TargetCalories" in users_db.columns and pd.notna(users_db.at[idx, "TargetCalories"]):
                                 st.session_state.target_calories = int(users_db.at[idx, "TargetCalories"])
                             st.rerun()
@@ -116,15 +107,12 @@ if not st.session_state.authenticated:
     
     with tab_register:
         with st.form("reg_form", clear_on_submit=True):
-            # ANTI-FREELOADER: Require Email
             n_user = st.text_input("Email Address")
             n_pwd = st.text_input("New Password", type="password")
             ans = st.number_input(f"Captcha: {st.session_state.num1} + {st.session_state.num2}", step=1, value=None)
             
             if st.form_submit_button("Start 7-Day Free Trial"):
                 if ans == (st.session_state.num1 + st.session_state.num2) and n_user.strip() and n_pwd.strip():
-                    
-                    # Basic Email Validation
                     if "@" not in n_user or "." not in n_user:
                         st.error("❗ Please enter a valid email address.")
                     else:
@@ -149,12 +137,18 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ==========================================
-# --- 3. SESSION LOCK MONITOR ---
+# --- 3. SESSION LOCK & LIVE ACCOUNT MONITOR ---
 # ==========================================
 try:
     current_users = conn.read(worksheet="Users", ttl=0)
     current_users["SessionID"] = current_users["SessionID"].astype(str)
-    cloud_sid = str(current_users.loc[current_users["Username"] == st.session_state.username, "SessionID"].values[0])
+    
+    # Grab the current user's live row from the database
+    user_row = current_users.loc[current_users["Username"] == st.session_state.username]
+    cloud_sid = str(user_row["SessionID"].values[0])
+    
+    # LIVE CHECK: Did they just pay? If so, upgrade them instantly without forcing a relogin!
+    st.session_state.is_paid = str(user_row["IsPaid"].values[0]).strip().upper() == "TRUE"
     
     if cloud_sid != str(st.session_state.session_id) and cloud_sid != "nan" and cloud_sid != "":
         st.session_state.authenticated = False
@@ -164,11 +158,40 @@ except Exception:
     pass
 
 # ==========================================
-# --- 4. SIDEBAR & LOGOUT ---
+# --- 4. SIDEBAR PAYWALL & LOGOUT ---
 # ==========================================
+# Calculate Trial Days
+try:
+    join_date = datetime.datetime.strptime(st.session_state.join_date_str, "%Y-%m-%d").date()
+    days_active = (datetime.date.today() - join_date).days
+except:
+    days_active = 0
+trial_length = 7
+days_left = trial_length - days_active
+
 with st.sidebar:
     st.markdown(f"### 👤 {st.session_state.username}")
+    
+    # --- MEMBERSHIP ROUTER ---
+    if st.session_state.is_paid:
+        st.success("Lifetime Premium Active 👑")
+    elif not st.session_state.is_paid and days_left > 0:
+        st.warning(f"Free Trial: **{days_left} days left**")
+        st.progress(max(0.0, min(days_active / trial_length, 1.0)))
+        st.divider()
+        st.write("Love the app? Don't wait for the trial to end.")
+        st.link_button("🚀 Upgrade to Premium ($75)", CHECKOUT_LINK, use_container_width=True)
+    else:
+        st.error("Free Trial Expired 🔒")
+        st.write("Your 7-day trial has ended. Upgrade to Lifetime Premium to unlock your macros and continue tracking!")
+        st.link_button("🔓 Unlock Premium ($75)", CHECKOUT_LINK, use_container_width=True)
+        if st.button("Log Out"):
+            st.session_state.authenticated = False
+            st.rerun()
+        st.stop() # THE BOUNCER KICKS IN HERE - STOPS APP IF EXPIRED
+        
     st.divider()
+    
     st.number_input("Daily Goal", min_value=1000, max_value=5000, step=50, 
                     value=st.session_state.target_calories, key="calorie_input_widget", on_change=update_calorie_goal)
     cal_goal = st.session_state.target_calories
