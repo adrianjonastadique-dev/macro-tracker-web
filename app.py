@@ -13,7 +13,7 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Macro Tracker", layout="centered")
 
 # Replace this with your actual Lemon Squeezy link!
-CHECKOUT_LINK = "https://borie2.lemonsqueezy.com/checkout/buy/60d50b57-09bc-4df9-8f0c-fd522485d6e7"
+CHECKOUT_LINK = "https://your-store.lemonsqueezy.com/checkout/buy/YOUR_PRODUCT_ID"
 
 try:
     with open("style.css") as f:
@@ -75,7 +75,6 @@ if not st.session_state.authenticated:
                 
                 if entered_user.strip() and entered_pwd.strip():
                     try:
-                        # Fetch fresh data
                         users_db = conn.read(worksheet="Users", ttl=0).dropna(subset=["Username"])
                         
                         if "SessionID" not in users_db.columns:
@@ -86,16 +85,17 @@ if not st.session_state.authenticated:
                         
                         if not user_match.empty and str(user_match.iloc[0]["Password"]).strip() == entered_pwd.strip():
                             
-                            # Cloud Session Lock: Kick out other devices
                             idx = user_match.index[0]
                             users_db.at[idx, "SessionID"] = str(st.session_state.session_id)
                             conn.update(worksheet="Users", data=users_db)
                             
-                            # Finalize Login & Grab Trial Variables
                             st.session_state.authenticated = True
                             st.session_state.username = entered_user.strip()
                             st.session_state.join_date_str = str(user_match.iloc[0].get("JoinDate", "2026-01-01"))
-                            st.session_state.is_paid = str(user_match.iloc[0].get("IsPaid", "False")).strip().upper() == "TRUE"
+                            
+                            # THE FIX: Now safely accepts "TRUE", "1", or "1.0"
+                            is_paid_val = str(user_match.iloc[0].get("IsPaid", "False")).strip().upper()
+                            st.session_state.is_paid = (is_paid_val in ["TRUE", "1", "1.0"])
                             
                             if "TargetCalories" in users_db.columns and pd.notna(users_db.at[idx, "TargetCalories"]):
                                 st.session_state.target_calories = int(users_db.at[idx, "TargetCalories"])
@@ -143,12 +143,12 @@ try:
     current_users = conn.read(worksheet="Users", ttl=0)
     current_users["SessionID"] = current_users["SessionID"].astype(str)
     
-    # Grab the current user's live row from the database
     user_row = current_users.loc[current_users["Username"] == st.session_state.username]
     cloud_sid = str(user_row["SessionID"].values[0])
     
-    # LIVE CHECK: Did they just pay? If so, upgrade them instantly without forcing a relogin!
-    st.session_state.is_paid = str(user_row["IsPaid"].values[0]).strip().upper() == "TRUE"
+    # THE FIX: Live monitor also safely accepts "TRUE", "1", or "1.0"
+    live_paid_val = str(user_row["IsPaid"].values[0]).strip().upper()
+    st.session_state.is_paid = (live_paid_val in ["TRUE", "1", "1.0"])
     
     if cloud_sid != str(st.session_state.session_id) and cloud_sid != "nan" and cloud_sid != "":
         st.session_state.authenticated = False
@@ -160,7 +160,6 @@ except Exception:
 # ==========================================
 # --- 4. SIDEBAR PAYWALL & LOGOUT ---
 # ==========================================
-# Calculate Trial Days
 try:
     join_date = datetime.datetime.strptime(st.session_state.join_date_str, "%Y-%m-%d").date()
     days_active = (datetime.date.today() - join_date).days
@@ -188,7 +187,7 @@ with st.sidebar:
         if st.button("Log Out"):
             st.session_state.authenticated = False
             st.rerun()
-        st.stop() # THE BOUNCER KICKS IN HERE - STOPS APP IF EXPIRED
+        st.stop() 
         
     st.divider()
     
@@ -246,7 +245,6 @@ total_carbs = todays_log["Carbs (g)"].sum() if not todays_log.empty else 0
 total_fats = todays_log["Fats (g)"].sum() if not todays_log.empty else 0
 remaining_cals = cal_goal - total_cals
 
-# --- GLOW CARD ---
 st.progress(min(max(total_cals / cal_goal, 0.0), 1.0))
 is_over = total_cals > cal_goal
 glow_class = "glow-red" if is_over else "glow-green"
