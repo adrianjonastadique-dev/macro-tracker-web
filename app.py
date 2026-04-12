@@ -180,11 +180,11 @@ with st.sidebar:
         st.progress(max(0.0, min(days_active / trial_length, 1.0)))
         st.divider()
         st.write("Love the app? Don't wait for the trial to end.")
-        st.link_button("🚀 Upgrade to Premium ($75)", CHECKOUT_LINK, use_container_width=True)
+        st.link_button("🚀 Upgrade to Premium", CHECKOUT_LINK, use_container_width=True)
     else:
         st.error("Free Trial Expired 🔒")
         st.write("Your 7-day trial has ended. Upgrade to Lifetime Premium to unlock your macros and continue tracking!")
-        st.link_button("🔓 Unlock Premium ($75)", CHECKOUT_LINK, use_container_width=True)
+        st.link_button("🔓 Unlock Premium", CHECKOUT_LINK, use_container_width=True)
         if st.button("Log Out"):
             st.session_state.authenticated = False
             st.rerun()
