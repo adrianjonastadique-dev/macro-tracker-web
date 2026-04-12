@@ -7,52 +7,6 @@ import pytz
 import uuid
 from streamlit_gsheets import GSheetsConnection
 
-import streamlit as st
-from datetime import datetime
-
-# --- PLACEHOLDER USER DATA ---
-# In your real app, these variables come from your Google Sheet when the user logs in
-user_is_paid = False  # Set to True if Make.com updated their row!
-join_date_str = "2026-04-12" # Pulled from the new JoinDate column
-checkout_link = "https://your-store.lemonsqueezy.com/checkout/buy/..." # Your real Lemon Squeezy link
-
-# --- TIME MATH ---
-join_date = datetime.strptime(join_date_str, "%Y-%m-%d").date()
-today = datetime.now().date()
-days_active = (today - join_date).days
-trial_length = 7
-days_left = trial_length - days_active
-
-# --- MEMBERSHIP ROUTER ---
-with st.sidebar:
-    st.header("👤 Account Status")
-    
-    if user_is_paid == True:
-        # User is Premium
-        st.success("Lifetime Premium Active 👑")
-        
-    elif user_is_paid == False and days_left > 0:
-        # User is on Free Trial
-        st.warning(f"Free Trial: **{days_left} days left**")
-        st.progress(days_active / trial_length) # Visual progress bar!
-        
-        st.divider()
-        st.write("Love the app? Don't wait for the trial to end.")
-        # The early upgrade button
-        st.link_button("🚀 Upgrade to Premium ($75)", checkout_link, use_container_width=True)
-        
-    else:
-        # User is Expired
-        st.error("Free Trial Expired 🔒")
-        st.write("Your 7-day trial has ended. Upgrade to lifetime Premium to unlock your macros and continue tracking!")
-        st.link_button("🔓 Unlock Premium ($75)", checkout_link, use_container_width=True)
-        
-        # This completely stops the rest of the Python script from running, locking them out
-        st.stop() 
-
-# --- THE REST OF YOUR APP CODE GOES BELOW THIS LINE ---
-st.title("Macro Tracker Dashboard")
-st.write("Welcome to the app! If you are seeing this, you are either Premium or on an active Trial.")
 # ==========================================
 # --- 1. APP CONFIGURATION & STYLES ---
 # ==========================================
